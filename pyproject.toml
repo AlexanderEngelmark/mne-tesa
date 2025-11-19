@@ -1,0 +1,11 @@
+[project]
+name = "mne-tesa"
+version = "0.1.0"
+description = "Adaptation of TMS-EEG signal analyzer (TESA) using MNE-Python"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "mne>=1.10.2",
+    "mne-faster>=1.2.2",
+    "plotly>=6.4.0",
+]
