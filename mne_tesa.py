@@ -37,13 +37,36 @@ def notch_filter_epochs(epochs):
     return epochs
 
 
-def tesa_interp_data_cubic_spline(
+def tesa_interp_cubic_spline(
     inst,
     inst_type: str,
     tmin: Optional[int],
     tmax: Optional[int],
     events: Optional[np.ndarray],
 ):
+    """Interpolate using cubic splines.
+
+    This function interpolates data around specified time points using
+    cubic splines in order to allow for filtering, ICA and downsampling.
+    It supports two types of input data: "mne.Raw" and "mne.Epochs".
+
+    Args:
+        inst: The instance containing the data to be interpolated.
+        inst_type (str): The type of data, either "raw" or "epochs".
+        tmin (Optional[int]): The start time for interpolation.
+        tmax (Optional[int]): The end time for interpolation.
+        events (Optional[np.ndarray]): The events to use for interpolation
+        in "raw" mode.
+
+    Returns:
+        The instance with interpolated data.
+
+    Raises:
+        ValueError: If `inst_type` is not "raw" or "epochs".
+
+    Example:
+        >>> tesa_interp_data_cubic_spline(epochs, "epochs", -2, 15, events)
+    """
     from scipy.interpolate import CubicSpline
 
     if inst_type == "raw":
@@ -91,6 +114,29 @@ def tesa_replace_constant_amplitude(
     tmax: Optional[int],
     events: Optional[np.ndarray],
 ):
+    """Replace data with constant amplitude (zero).
+
+    This function replaces data around specified time points with zeros
+    to allow for filtering, ICA, and downsampling. It supports two types
+    of input data: "mne.Raw" and "mne.Epochs".
+
+    Args:
+        inst: The instance containing the data to be modified.
+        inst_type (str): The type of data, either "raw" or "epochs".
+        tmin (Optional[int]): The start time for replacement.
+        tmax (Optional[int]): The end time for replacement.
+        events (Optional[np.ndarray]): The events to use for replacement
+        in "raw" mode.
+
+    Returns:
+        The instance with modified data.
+
+    Raises:
+        ValueError: If `inst_type` is not "raw" or "epochs".
+
+    Example:
+        >>> tesa_replace_constant_amplitude(epochs, "epochs", -2, 15, events)
+    """
     if inst_type == "raw":
         inst.load_data()
 
@@ -122,6 +168,30 @@ def tesa_replace_constant_amplitude(
 
 
 def find_pulse(raw, sfreq, thresh=5, plot=False):
+    """Detect TMS pulses in raw data using GFP thresholding.
+
+    This function identifies TMS pulses in raw EEG data by applying a high-pass
+    filter
+    and using Global Field Power (GFP) thresholding to detect pulse events.
+
+    Args:
+        raw: The raw EEG data instance (mne.io.Raw).
+        sfreq (float): The sampling frequency of the data in Hz.
+        thresh (float, optional): The threshold for pulse detection
+        (in microvolts).
+                                 Defaults to 5.
+        plot (bool, optional): Whether to plot the GFP data for visualization.
+                              Defaults to False.
+
+    Returns:
+        tuple: A tuple containing:
+            - events_from_annot (np.ndarray): Array of detected events.
+            - event_dict (dict): Dictionary mapping event descriptions to event
+            codes.
+
+    Example:
+        >>> events, event_dict = find_pulse(raw, sfreq, thresh=5, plot=True)
+    """
     # Might be useful to exclude some really bad channels
     # before if it's impossible to catch the pulse?
 
@@ -137,7 +207,7 @@ def find_pulse(raw, sfreq, thresh=5, plot=False):
     normal_cutoff = cutoff_freq / nyq
     b, a = butter(order, normal_cutoff, btype="highpass")
     filtered_data = filtfilt(b, a, data)
-    times = raw.times * 1000  # Get the 1-dimensional time array
+    times = raw.times * 1000
     # Just getting the GFP as in done in MNE
     gfp_data = np.std(filtered_data, axis=0, ddof=0) * 1e6
 
@@ -145,9 +215,6 @@ def find_pulse(raw, sfreq, thresh=5, plot=False):
         plt.figure(figsize=(20, 4))
         plt.plot(times, gfp_data)
 
-    # Just an arbitrary threshold for the GFP which should catch the TMS-pulses
-    # Should just be possible to tweak that and the filter
-    # so that one can catch all the pulses
     over_thres = gfp_data > thresh
 
     pulses = np.where(over_thres)
@@ -172,15 +239,29 @@ class ICA_TESA(ICA):
         super().__init__(*args, **kwargs)
 
     def find_bads_lateral_eye_movement(self, inst, ch_names=["F7", "F8"], threshold=2):
-        #   This type of artifact is detected by comparing the z scores
-        #   (calculated on the component topography weights)
-        #   of two electrodes on either side
-        #   of the forehead (e.g. 'F7','F8'). The z score must be positive for
-        #   one and
-        #   negative for the other. A threhold is set by the user for detection
-        #   (e.g. 2 means the z score in one electrode must be greater than
-        #   2 and less than
-        #   -2 in the other electrode). Components are stored under eyes.
+        """Detect lateral eye movement artefacts in ICA components.
+
+        This function identifies lateral eye movement artefacts by comparing
+        z-scores of specified frontal electrodes (default: 'F7' and 'F8')
+        in the component topographies. The z-score must be positive for one
+        electrode and negative for the other, with both exceeding the
+        specified threshold.
+
+        Args:
+            inst: The data instance (Raw or Epochs).
+            ch_names (list, optional): List of two channel names to compare.
+                                    Defaults to ["F7", "F8"].
+            threshold (float, optional): Threshold for z-score detection.
+                                        Defaults to 2.
+
+        Returns:
+            tuple: A tuple containing:
+                - list: Indices of components with lateral eye movement artefacts.
+                - list: Z-score pairs for each detected component.
+
+        Example:
+            >>> eye_components, eye_scores = ica.find_bads_lateral_eye_movement(epochs, ch_names=["F7", "F8"], threshold=2)
+        """
 
         eye_movement_components = []
         eye_movement_scores = []
@@ -213,17 +294,29 @@ class ICA_TESA(ICA):
         return eye_movement_components, eye_movement_scores
 
     def find_bads_tms_muscle(self, inst, threshold=8, muscle_window=[0.011, 0.030]):
-        # TMS-evoked muscle activity
-        # This type of artifact is detected by comparing the mean absolute
-        # amplitude of the component time course within a target window
-        # ('tmsMuscleWin')
-        # and the mean absolute amplitude across the entire component time
-        # course A threshold is
-        # set by the user for detection (e.g. 8 means the mean absolute
-        # amplitude in the target window
-        # is 8 times larger than the mean absolute amplitude across the entire
-        # time course).
-        # Components are stored under tmsMuscle.
+        """Detect TMS-evoked muscle activity artefacts in ICA components.
+
+        This function identifies muscle activity artifacts by comparing the mean
+        absolute amplitude of the component time course within a target
+        time window
+        to the overall mean amplitude of the component time course.
+        A component is
+        flagged if the mean amplitude in the target window exceeds the overall mean
+        amplitude by the specified threshold factor.
+
+        Args:
+            inst: The data instance (Raw or Epochs).
+            threshold (float, optional): Threshold for amplitude ratio detection.
+                                        Defaults to 8.
+            muscle_window (list, optional): Time window to check for muscle activity.
+                                        Defaults to [0.011, 0.030].
+
+        Returns:
+            list: Indices of components with TMS muscle artefacts.
+
+        Example:
+            >>> muscle_components = ica.find_bads_tms_muscle(epochs, threshold=8, muscle_window=[0.011, 0.030])
+        """
 
         tms_muscle_components = []
 
@@ -260,14 +353,23 @@ class ICA_TESA(ICA):
         return tms_muscle_components
 
     def find_bads_electrode_noise(self, inst, threshold=4):
-        #   Electrode noise
-        #   This type of artifact is detected by comparing z scores in
-        #   individual
-        #   electrodes (calculated on the component topography weights). A
-        #   threhold is
-        #   set by the user for detection (e.g. 4 means one or more electrodes
-        #   has
-        #   an absolute z score of at least 4).
+        """Detect electrode noise artifacts in ICA components.
+
+        This function identifies components with electrode noise by enumerating the
+        component topographies and checking for any channel index with an absolute z-score
+        exceeding the specified threshold within these topographies.
+
+        Args:
+            inst: The data instance (Raw or Epochs).
+            threshold (float, optional): Threshold for z-score detection.
+                                        Defaults to 4.
+
+        Returns:
+            list: Indices of components with electrode noise artifacts.
+
+        Example:
+            >>> noise_components = ica.find_bads_electrode_noise(epochs, threshold=4)
+        """
 
         elec_noise_components = []
 
@@ -305,6 +407,71 @@ def mne_tesa_class_comp(
     electrode_noise=True,
     elec_noise_thresh=4,
 ):
+    """Classify ICA components using multiple artefact detection methods.
+
+    This wrapper function applies various artifact detection methods to classify
+    ICA components in epochs data using the ICA_TESA instance. It also includes
+    the mne.preprocessing.ica.find_bads_muscle() as well as the mne.preprocessing.find_bads_eog()
+    methods and we refer to https://mne.tools/stable/generated/mne.preprocessing.ICA.html#mne.preprocessing.ICA
+    for information about these methods.
+
+    Args:
+        epochs: The epochs data instance.
+        ica (ICA_TESA): The ICA_TESA instance for artifact detection.
+        tmsMuscle (bool, optional): Whether to detect TMS muscle artifacts.
+                                  Defaults to True.
+        tmsMuscleThresh (float, optional): Threshold for TMS muscle detection.
+                                         Defaults to 8.
+        tmsMuscleWin (list, optional): Time window for TMS muscle detection.
+                                     Defaults to [0.011, 0.030].
+        blink (bool, optional): Whether to detect blink artifacts.
+                              Defaults to True.
+        blinkThresh (float, optional): Threshold for blink detection.
+                                     Defaults to 2.5.
+        blinkElecs (list, optional): Channels for blink detection.
+                                   Defaults to ["Fp1", "Fp2"].
+        lat_eye_move (bool, optional): Whether to detect lateral eye movements.
+                                     Defaults to True.
+        lat_eye_moveThresh (float, optional): Threshold for eye movement detection.
+                                            Defaults to 2.0.
+        lat_eye_move_elecs (list, optional): Channels for eye movement detection.
+                                           Defaults to ["F7", "F8"].
+        persistant_muscle (bool, optional): Whether to detect persistent muscle activity.
+                                          Defaults to True.
+        persistant_muscle_thresh (float, optional): Threshold for muscle detection.
+                                                  Defaults to 0.5.
+        muscleFreqIn (list, optional): Frequency range for muscle detection.
+                                    Defaults to [7, 70].
+        electrode_noise (bool, optional): Whether to detect electrode noise.
+                                        Defaults to True.
+        elec_noise_thresh (float, optional): Threshold for electrode noise detection.
+                                           Defaults to 4.
+
+    Returns:
+        tuple: A tuple containing:
+            - dict: Dictionary of classified components by artifact type.
+            - DataFrame: Grouped DataFrame of component classifications.
+
+    Example:
+        >>> classified_components, dataframe = mne_tesa_class_comp(
+            epochs,
+            ica,
+            tmsMuscle=True,
+            tmsMuscleThresh=8,
+            tmsMuscleWin=[0.011, 0.030],
+            blink=True,
+            blinkThresh=2.5,
+            blinkElecs=["Fp1", "Fp2"],
+            lat_eye_move=True,
+            lat_eye_moveThresh=2.0,
+            lat_eye_move_elecs=["F7", "F8"],
+            persistant_muscle=True,
+            persistant_muscle_thresh=0.5,
+            muscleFreqIn=[7, 70],
+            electrode_noise=True,
+            elec_noise_thresh=4,
+        )
+    """
     classified_comps = {}
 
     if lat_eye_move:
@@ -375,6 +542,28 @@ def mne_tesa_class_comp(
 
 
 def tesa_ica_select(epochs, ICA, tesa_comp_class_result=None):
+    """Interactive ICA component selection and visualization for Jupyter notebooks.
+
+    This function creates an interactive widget for visualizing and selecting
+    ICA components to exclude from epochs data. It displays component properties
+    and classification labels from the tesa_comp_class_result.
+
+    Note: This function requires ipywidgets to be installed.
+
+    Args:
+        epochs: The epochs data instance.
+        ICA: The ICA instance for artifact detection.
+        tesa_comp_class_result (dict, optional): Dictionary of classified components
+                                              from mne_tesa_class_comp.
+                                              Defaults to None.
+
+    Returns:
+        list: List of component indices to exclude.
+
+    Example:
+        >>> to_remove = tesa_ica_select(epochs, ica, tesa_comp_class_result)
+    """
+
     if tesa_comp_class_result is None:
         tesa_comp_class_result = {}
 

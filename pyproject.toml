@@ -7,5 +7,6 @@ requires-python = ">=3.12"
 dependencies = [
     "mne>=1.10.2",
     "mne-faster>=1.2.2",
+    "pandas>=2.3.3",
     "plotly>=6.4.0",
 ]

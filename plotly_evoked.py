@@ -3,6 +3,19 @@ import plotly.graph_objects as go
 
 
 def plot_gfp(evoked, times, xlim):
+    """Plot Global Field Power (GFP) using Plotly.
+
+    This function generates an interactive plot of the Global Field Power (GFP)
+    for evoked data using Plotly.
+
+    Args:
+        evoked: The evoked data instance (mne.Evoked).
+        times: The time array corresponding to the evoked data.
+        xlim: The time range to plot (list of start and end times in seconds).
+
+    Example:
+        >>> plot_gfp(evoked, times, xlim=[-0.1, 0.3])
+    """
     # mne.Evoked, 1DArray, list
 
     idx_s, idx_e = evoked.time_as_index(xlim)
@@ -41,6 +54,24 @@ def plot_gfp(evoked, times, xlim):
 
 
 def plot_evoked(evoked, times, xlim=[-0.4, 0.4], width=1000, height=600):
+    """Plot evoked responses using Plotly.
+
+    This function generates an interactive plot of evoked responses for all
+    channels using Plotly.
+
+    Args:
+        evoked: The evoked data instance (mne.Evoked).
+        times: The time array corresponding to the evoked data.
+        xlim (list, optional): The time range to plot (in seconds).
+                             Defaults to [-0.4, 0.4].
+        width (int, optional): The width of the plot in pixels.
+                             Defaults to 1000.
+        height (int, optional): The height of the plot in pixels.
+                              Defaults to 600.
+
+    Example:
+        >>> plot_evoked(evoked, times, xlim=[-0.1, 0.3], width=800, height=500)
+    """
     idx_s, idx_e = evoked.time_as_index(xlim)
     data = evoked.get_data()  # Get the evoked data as a numpy array
     times = times[idx_s:idx_e] * 1000  # Get the 1-dimensional time array
