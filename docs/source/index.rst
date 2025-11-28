@@ -7,7 +7,7 @@ Welcome to MNE-TESA!
 
 MNE-TESA is an adaptation of the TMS-EEG signal analyzer (TESA) from Rogasch et al., 2017, built as a plugin to MNE-Python.
 
-See https://github.com/AlexanderEngelmark/mne-TESA/blob/main/tesa-mv.ipynb for a tutorial on how to use the functions.
+See https://github.com/AlexanderEngelmark/mne-TESA/blob/main/tutorial.ipynb for a tutorial on how to use the functions.
 
 **Reference Paper:**
 N. C. Rogasch, C. Sullivan, R. H. Thomson, N. S. Rose, N. W. Bailey, P. B.
