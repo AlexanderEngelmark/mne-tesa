@@ -23,7 +23,6 @@ https://docs.astral.sh/uv/pip/environments/
 source .venv/bin/activate
 ```
 
-
 ### Installing the plugin (Will install MNE-Python and other required libraries)
 
 Clone the repository: 
