@@ -76,6 +76,17 @@ conda install ipykernel
 python -m ipykernel install --user --name=mne-tesa
 ```
 
+## Example data
+
+The tutorial requires sample BrainVision EEG files. Download them from Zenodo:
+
+```bash
+mkdir -p example_data
+wget -P example_data https://zenodo.org/records/20598851/files/TMS_EEG64Magventure80.eeg?download=1
+wget -P example_data https://zenodo.org/records/20598851/files/TMS_EEG64Magventure80.vhdr?download=1
+wget -P example_data https://zenodo.org/records/20598851/files/TMS_EEG64Magventure80.vmrk?download=1
+```
+
 ## Getting started
 
 Launch Jupyter and open the tutorial:
