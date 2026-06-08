@@ -9,4 +9,6 @@ wheels/
 # Virtual environments
 .venv
 
+AGENTS.md
+
 docs/build/
