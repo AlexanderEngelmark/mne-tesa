@@ -21,7 +21,6 @@ https://docs.astral.sh/uv/pip/environments/
 
 ```bash
 source .venv/bin/activate
-
 ```
 
 
