@@ -1,0 +1,73 @@
+/* MNE-Python inspired styling for mne-tesa */
+
+:root {
+    --pst-font-size-base: 16px;
+    --pst-font-family-base: 'Source Sans Pro', var(--pst-font-family-base-system);
+    --pst-font-family-heading: var(--pst-font-family-base);
+    --pst-font-family-monospace: 'Source Code Pro', var(--pst-font-family-monospace-system);
+    --mne-font-weight-semibold: 600;
+}
+
+html[data-theme="light"] {
+    --pst-color-primary: #276be9;
+    --pst-color-primary-bg: #dce7fc;
+    --pst-color-info: var(--pst-teal-500);
+    --pst-color-info-bg: var(--pst-teal-200);
+    --pst-color-secondary: var(--pst-color-warning);
+    --pst-color-secondary-bg: var(--pst-color-warning-bg);
+    --pst-color-inline-code-links: var(--pst-color-link);
+    --pst-color-table-row-hover-bg: var(--pst-color-secondary-bg);
+    --copybtn-opacity: 0.75;
+}
+
+html[data-theme="dark"] {
+    --pst-color-primary: #79a3f2;
+    --pst-color-primary-bg: #06245d;
+    --pst-color-info: var(--pst-teal-400);
+    --pst-color-info-bg: var(--pst-teal-800);
+    --pst-color-secondary: var(--pst-color-warning);
+    --pst-color-secondary-bg: var(--pst-color-warning-bg);
+    --pst-color-inline-code-links: var(--pst-color-link);
+    --pst-color-table-row-hover-bg: var(--pst-color-secondary-bg);
+    --copybtn-opacity: 0.25;
+}
+
+/* API docs parameter lists */
+dl.field-list {
+    grid-template-columns: auto 1fr;
+}
+
+/* Copy button */
+button.copybtn {
+    opacity: var(--copybtn-opacity);
+}
+
+/* Navbar */
+.bd-header.navbar-light#navbar-main .navbar-nav li a.nav-link {
+    color: var(--pst-color-text-muted);
+}
+
+.bd-header.navbar-light#navbar-main .navbar-nav > li.active > .nav-link {
+    font-weight: var(--mne-font-weight-semibold);
+}
+
+.bd-header.navbar-light#navbar-main .navbar-nav li a.nav-link:focus,
+.bd-header.navbar-light#navbar-main .navbar-nav li a.nav-link:hover {
+    color: var(--pst-color-secondary);
+}
+
+/* Versionadded/versionchanged */
+div.versionadded > p {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+div.versionadded {
+    margin: 0;
+    margin-left: 0.5rem;
+    display: inline-block;
+}
+
+dd > p {
+    display: inline;
+}

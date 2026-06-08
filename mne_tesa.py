@@ -12,6 +12,16 @@ import warnings
 
 
 def tesa_notch_filter_epochs(epochs, f_stop=(48, 52), order=2):
+    """Apply a Butterworth bandstop filter to epoched data.
+
+    Args:
+        epochs (mne.Epochs): The epoched data to filter.
+        f_stop (tuple): The stopband frequencies in Hz. Defaults to (48, 52).
+        order (int): The order of the Butterworth filter. Defaults to 2.
+
+    Returns:
+        mne.Epochs: The filtered epochs.
+    """
     print(f"Constructing a {order} order bandstop filter with stopband {f_stop}")
     sfreq = epochs.info["sfreq"]
     nyq = sfreq / 2.0
@@ -29,6 +39,17 @@ def tesa_notch_filter_epochs(epochs, f_stop=(48, 52), order=2):
 
 
 def tesa_bandpass_filter_epochs(epochs, l_freq=1, h_freq=100, order=2):
+    """Apply a Butterworth bandpass filter to epoched data.
+
+    Args:
+        epochs (mne.Epochs): The epoched data to filter.
+        l_freq (float): The lower passband edge in Hz. Defaults to 1.
+        h_freq (float): The upper passband edge in Hz. Defaults to 100.
+        order (int): The order of the Butterworth filter. Defaults to 2.
+
+    Returns:
+        mne.Epochs: The filtered epochs.
+    """
     print(
         f"Constructing a {order} order bandpass filter with lfreq {l_freq} and hfreq {h_freq}"
     )
@@ -247,26 +268,26 @@ def tesa_find_pulse(raw, sfreq, thresh=5, plot=False):
     """Detect TMS pulses in raw data using GFP thresholding.
 
     This function identifies TMS pulses in raw EEG data by applying a high-pass
-    filter
-    and using Global Field Power (GFP) thresholding to detect pulse events.
+    filter and using Global Field Power (GFP) thresholding to detect pulse
+    events.
 
     Args:
         raw: The raw EEG data instance (mne.io.Raw).
         sfreq (float): The sampling frequency of the data in Hz.
         thresh (float, optional): The threshold for pulse detection
-        (in microvolts).
-                                 Defaults to 5.
+            (in microvolts). Defaults to 5.
         plot (bool, optional): Whether to plot the GFP data for visualization.
-                              Defaults to False.
+            Defaults to False.
 
     Returns:
         tuple: A tuple containing:
             - events_from_annot (np.ndarray): Array of detected events.
-            - event_dict (dict): Dictionary mapping event descriptions to event
-            codes.
+            - event_dict (dict): Dictionary mapping event descriptions to
+              event codes.
 
     Example:
-        >>> events, event_dict = find_pulse(raw, sfreq, thresh=5, plot=True)
+        >>> events, event_dict = tesa_find_pulse(raw, sfreq, thresh=5,
+        ...                                      plot=True)
     """
     # Might be useful to exclude some really bad channels
     # before if it's impossible to catch the pulse?

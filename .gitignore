@@ -13,4 +13,9 @@ AGENTS.md
 
 example_data/
 
+# Jupyter
+.ipynb_checkpoints/
+
+# Sphinx generated docs
 docs/build/
+docs/source/_autosummary/
