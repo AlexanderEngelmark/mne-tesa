@@ -2,7 +2,7 @@ import numpy as np
 import plotly.graph_objects as go
 
 
-def plot_gfp(evoked, times, xlim):
+def tesa_plotly_gfp(evoked, times, xlim):
     """Plot Global Field Power (GFP) using Plotly.
 
     This function generates an interactive plot of the Global Field Power (GFP)
@@ -53,7 +53,7 @@ def plot_gfp(evoked, times, xlim):
     fig.show()
 
 
-def plot_evoked(evoked, times, xlim=[-0.4, 0.4], width=1000, height=600):
+def tesa_plotly_evoked(evoked, times, xlim=[-0.4, 0.4], width=1000, height=600):
     """Plot evoked responses using Plotly.
 
     This function generates an interactive plot of evoked responses for all

@@ -4,46 +4,38 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from mne.preprocessing import ICA
-from scipy.signal import butter, sosfiltfilt
 from scipy.stats import zscore
 
+from scipy.interpolate import CubicSpline
+
 from typing import Optional
-import warnings
 
 
-def tesa_notch_filter_epochs(epochs, f_stop=(48, 52), order=2):
-    print(f"Constructing a {order} order bandstop filter with stopband {f_stop}")
-    sfreq = epochs.info["sfreq"]
-    nyq = sfreq / 2.0
-    low = f_stop[0] / nyq
-    high = f_stop[1] / nyq
-    sos = butter(order, [low, high], btype="bandstop", output="sos")
-    data = epochs.get_data()
-    n_channels, n_times, n_epochs = data.shape
-    data_concat = data.reshape(n_channels, -1)
-    print("Filtering data..")
-    data_filt_concat = sosfiltfilt(sos, data_concat, axis=1)
-    data_filt = data_filt_concat.reshape(n_channels, n_times, n_epochs)
-    epochs._data = data_filt
-    return epochs
+def notch_filter_epochs(epochs):
+    from mne.filter import construct_iir_filter, filter_data
 
-
-def tesa_bandpass_filter_epochs(epochs, l_freq=1, h_freq=100, order=2):
-    print(
-        f"Constructing a {order} order bandpass filter with lfreq {l_freq} and hfreq {h_freq}"
+    iir_params = construct_iir_filter(
+        iir_params=dict(order=4, ftype="butter", output="sos"),
+        f_pass=[48, 52],
+        f_stop=None,
+        sfreq=epochs.info["sfreq"],
+        btype="bandstop",
+        phase="zero",
     )
-    sfreq = epochs.info["sfreq"]
-    nyq = sfreq / 2.0
-    low = l_freq / nyq
-    high = h_freq / nyq
-    sos = butter(order, [low, high], btype="bandpass", output="sos")
-    data = epochs.get_data()
-    n_channels, n_times, n_epochs = data.shape
-    data_concat = data.reshape(n_channels, -1)
-    print("Filtering data..")
-    data_filt_concat = sosfiltfilt(sos, data_concat, axis=1)
-    data_filt = data_filt_concat.reshape(n_channels, n_times, n_epochs)
-    epochs._data = data_filt
+
+    def apply_bandstop(x):
+        return filter_data(
+            x,
+            sfreq=epochs.info["sfreq"],
+            l_freq=None,
+            h_freq=None,
+            method="iir",
+            iir_params=iir_params,
+            phase="zero",
+        )
+
+    epochs.apply_function(apply_bandstop, picks="all", channel_wise=True)
+
     return epochs
 
 
@@ -82,8 +74,10 @@ def tesa_interp_cubic_spline(
         The modified instance.
     """
     sfreq = inst.info["sfreq"]
+
     s_start = int(np.round(sfreq * tmin))
-    s_end = int(np.round(sfreq * tmax))  # inclusive end sample offset
+    s_end = int(np.round(sfreq * tmax))
+
     n_pre = int(np.round(sfreq * interp_win[0]))
     n_post = int(np.round(sfreq * interp_win[1]))
 
@@ -93,58 +87,56 @@ def tesa_interp_cubic_spline(
         event_samples = events[:, 0]
         data = inst.get_data()
         n_channels, n_samples = data.shape
-        times = inst.times
+        times = inst.times  # absolute times
 
         for ev in event_samples:
             gap_start = ev + s_start
-            gap_end_incl = ev + s_end  # inclusive last sample of gap
-            if gap_start < 0 or gap_end_incl >= n_samples:
+            gap_end = ev + s_end
+            if gap_start < 0 or gap_end >= n_samples:
                 continue
 
             start_wide = max(0, gap_start - n_pre)
-            end_wide = min(n_samples, gap_end_incl + n_post)  # inclusive wide end
+            end_wide = min(n_samples, gap_end + n_post)
+
             times_wide = times[start_wide:end_wide]
             t_shift = times_wide - times_wide[0]
 
             gap_local_start = gap_start - start_wide
-            gap_local_end_incl = gap_end_incl - start_wide
+            gap_local_end = gap_end - start_wide
 
             for ch in range(n_channels):
                 y_wide = data[ch, start_wide:end_wide]
 
                 known_mask = np.ones(len(y_wide), dtype=bool)
-                known_mask[gap_local_start : gap_local_end_incl + 1] = False
-
+                known_mask[gap_local_start:gap_local_end] = False
                 x_known = t_shift[known_mask]
                 y_known = y_wide[known_mask]
 
                 if len(x_known) >= 4:
+                    # Fit cubic polynomial (least squares if >4 points)
                     coeffs = np.polyfit(x_known, y_known, 3)
-                    # x for the gap (inclusive)
-                    x_gap = t_shift[gap_local_start : gap_local_end_incl + 1]
+                    x_gap = t_shift[gap_local_start:gap_local_end]
                     y_gap = np.polyval(coeffs, x_gap)
-                    # replace gap (inclusive end)
-                    data[ch, gap_start : gap_end_incl + 1] = y_gap
+                    data[ch, gap_start:gap_end] = y_gap
 
         inst._data = data
         print(f"Interpolated data between {tmin} and {tmax} using np.polyfit")
-        return inst
 
     elif inst_type == "epochs":
         epoch_start = inst.times[0]
         first_samp = int(np.round(sfreq * tmin)) - int(np.round(sfreq * epoch_start))
-        last_samp_incl = int(np.round(sfreq * tmax)) - int(
-            np.round(sfreq * epoch_start)
-        )
+        last_samp = int(np.round(sfreq * tmax)) - int(np.round(sfreq * epoch_start))
 
-        data = inst.get_data()
+        gap_idx = np.arange(first_samp, last_samp)
+
+        data = inst.get_data()  # shape (n_epochs, n_channels, n_times)
         n_epochs, n_channels, n_times = data.shape
-        times = inst.times
+        times = inst.times  # epoch‑relative times
 
         for ep in range(n_epochs):
             for ch in range(n_channels):
                 start_wide = max(0, first_samp - n_pre)
-                end_wide = min(n_times, last_samp_incl + n_post)
+                end_wide = min(n_times, last_samp + n_post)
 
                 if end_wide - start_wide < 4:
                     continue
@@ -152,24 +144,20 @@ def tesa_interp_cubic_spline(
                 times_wide = times[start_wide:end_wide]
                 t_shift = times_wide - times_wide[0]
 
-                # indices of gap within the wide window (inclusive)
                 gap_local_start = first_samp - start_wide
-                gap_local_end_incl = last_samp_incl - start_wide
+                gap_local_end = last_samp - start_wide
 
                 y_wide = data[ep, ch, start_wide:end_wide]
-
                 known_mask = np.ones(len(y_wide), dtype=bool)
-                known_mask[gap_local_start : gap_local_end_incl + 1] = False
-
+                known_mask[gap_local_start:gap_local_end] = False
                 x_known = t_shift[known_mask]
                 y_known = y_wide[known_mask]
 
                 if len(x_known) >= 4:
                     coeffs = np.polyfit(x_known, y_known, 3)
-                    x_gap = t_shift[gap_local_start : gap_local_end_incl + 1]
+                    x_gap = t_shift[gap_local_start:gap_local_end]
                     y_gap = np.polyval(coeffs, x_gap)
-                    # replace inclusive gap
-                    data[ep, ch, first_samp : last_samp_incl + 1] = y_gap
+                    data[ep, ch, first_samp:last_samp] = y_gap
 
         inst._data = data
         print(f"Interpolated data between {tmin} and {tmax} using np.polyfit")
@@ -212,30 +200,28 @@ def tesa_replace_constant_amplitude(
     """
     sfreq = inst.info["sfreq"]
     s_start = int(np.round(sfreq * tmin))
-    s_end = int(np.round(sfreq * tmax))  # inclusive end offset
+    s_end = int(np.round(sfreq * tmax))
 
     if inst_type == "raw":
         if events is None:
             raise ValueError("For raw data, events must be provided.")
         inst.load_data()
-        event_samples = events[:, 0]
+        event_samples = events[:, 0]  # absolute sample indices
         data = inst.get_data()
         n_channels, n_samples = data.shape
         for ev in event_samples:
             first_samp = ev + s_start
-            last_samp_incl = ev + s_end
-            if 0 <= first_samp < last_samp_incl <= n_samples:
-                data[:, first_samp : last_samp_incl + 1] = 0  # inclusive slice
+            last_samp = ev + s_end
+            if 0 <= first_samp < last_samp <= n_samples:
+                data[:, first_samp:last_samp] = 0
         inst._data = data
 
     elif inst_type == "epochs":
         epoch_start = inst.times[0]
         first_samp = int(np.round(sfreq * tmin)) - int(np.round(sfreq * epoch_start))
-        last_samp_incl = int(np.round(sfreq * tmax)) - int(
-            np.round(sfreq * epoch_start)
-        )
+        last_samp = int(np.round(sfreq * tmax)) - int(np.round(sfreq * epoch_start))
         data = inst.get_data()
-        data[:, :, first_samp : last_samp_incl + 1] = 0
+        data[:, :, first_samp:last_samp] = 0
         inst._data = data
 
     else:
@@ -243,7 +229,7 @@ def tesa_replace_constant_amplitude(
     return inst
 
 
-def tesa_find_pulse(raw, sfreq, thresh=5, plot=False):
+def find_pulse(raw, sfreq, thresh=5, plot=False):
     """Detect TMS pulses in raw data using GFP thresholding.
 
     This function identifies TMS pulses in raw EEG data by applying a high-pass
@@ -415,9 +401,13 @@ class ICA_TESA(ICA):
             component_mean_abs_amp = (np.mean(np.abs(component))) * threshold
             if mean_abs_amp_win > component_mean_abs_amp:
                 print(
-                    f"""Component {n} marked as TMS muscle
-                    Mean absolute amplitude in muscle window {mean_abs_amp_win}
-                    mean absolute amplitude in component {component_mean_abs_amp / threshold}"""
+                    f"Component {
+                        n
+                    } marked as TMS muscle\n Mean absolute amplitude in muscle window {
+                        mean_abs_amp_win
+                    } mean absolute amplitude in component {
+                        component_mean_abs_amp / threshold
+                    }"
                 )
                 tms_muscle_components.append(n)
 
@@ -459,7 +449,7 @@ class ICA_TESA(ICA):
         return elec_noise_components
 
 
-def tesa_class_comp(
+def mne_tesa_class_comp(
     epochs,
     ica: ICA_TESA,
     tmsMuscle=True,
@@ -543,30 +533,27 @@ def tesa_class_comp(
             elec_noise_thresh=4,
         )
     """
-    print(
-        "\n ****************** \n Running component classification \n ****************** \n"
-    )
-    classified_comps = {
-        "lat_eye_move": [],
-        "tmsMuscle": [],
-        "persistant_muscle": [],
-        "blink": [],
-        "elecNoise": [],
-    }
+    classified_comps = {}
     if lat_eye_move:
-        missing = [ch for ch in lat_eye_move_elecs if ch not in ica.ch_names]
+        missing = [ch for ch in lat_eye_move_elecs if ch not in epochs.ch_names]
         if missing:
             warnings.warn(
                 f"Lateral eye movement electrodes {missing} not found. "
                 "Skipping lateral eye movement detection."
             )
         else:
-            lat_eye_move_comps, lat_eye_movement_scores = (
-                ica.find_bads_lateral_eye_movement(
-                    epochs, lat_eye_move_elecs, lat_eye_moveThresh
-                )
+            lat_eye_move_comps, lat_eye_movement_scores = ica.find_bads_lateral_eye_movement(
+                epochs, lat_eye_move_elecs, lat_eye_moveThresh
             )
             classified_comps["lat_eye_move"] = lat_eye_move_comps
+            
+    if lat_eye_move:
+        lat_eye_move_comps, lat_eye_movement_scores = (
+            ica.find_bads_lateral_eye_movement(
+                epochs, lat_eye_move_elecs, lat_eye_moveThresh
+            )
+        )
+        classified_comps["lat_eye_move"] = lat_eye_move_comps
 
     if tmsMuscle:
         tms_muscle_comps = ica.find_bads_tms_muscle(
@@ -589,10 +576,11 @@ def tesa_class_comp(
         classified_comps["persistant_muscle"] = persistant_muscle_comps
 
     if blink:
-        missing = [ch for ch in blinkElecs if ch not in ica.ch_names]
+        missing = [ch for ch in blinkElecs if ch not in epochs.ch_names]
         if missing:
             warnings.warn(
-                f"Blink electrodes {missing} not found. Skipping blink detection."
+                f"Blink electrodes {missing} not found. "
+                "Skipping blink detection."
             )
         else:
             maybe_double_eog_components = set()
@@ -600,7 +588,7 @@ def tesa_class_comp(
                 eog_idx, scores = ica.find_bads_eog(
                     epochs,
                     ch_name=channel,
-                    threshold=blinkThresh,
+                    threshold=3.0,
                     start=None,
                     stop=None,
                     l_freq=1,
@@ -676,7 +664,7 @@ def tesa_ica_select(epochs, ICA, tesa_comp_class_result=None):
     import ipywidgets as widgets
     from IPython.display import display
 
-    number_of_components = list(range(ica.n_components_))
+    number_of_components = list(range(ica.n_components))
     ncs = [str(n) for n in number_of_components]
 
     output = widgets.Output()
@@ -701,7 +689,9 @@ def tesa_ica_select(epochs, ICA, tesa_comp_class_result=None):
                     print("\n\n Component was not flagged \n\n")
                 else:
                     print(
-                        f"\n************\nComponent is flagged as: {labels}\n\n************\n"
+                        f"\n************\nComponent is flagged as: {
+                            labels
+                        }\n\n************\n"
                     )
 
     w.observe(on_change)
