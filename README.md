@@ -4,7 +4,7 @@ A Python plugin for MNE-Python implementing the TMS-EEG signal analyzer (TESA) p
 
 ### Setup
 
-The recommended way to install is with [uv](https://docs.astral.sh/uv/):
+The recommended way to install is with (https://docs.astral.sh/uv/):
 
 Create a virtual environment with:
 
